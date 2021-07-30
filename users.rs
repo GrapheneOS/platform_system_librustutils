@@ -12,7 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Android rust utilities.
+//! Provides utilities for Android user ids.
 
-pub mod system_properties;
-pub mod users;
+pub use cutils_bindgen::AID_KEYSTORE;
+pub use cutils_bindgen::AID_USER_OFFSET;
+
+/// Gets the user id from a uid.
+pub fn multiuser_get_user_id(uid: u32) -> u32 {
+    uid / AID_USER_OFFSET
+}
+
+/// Gets the app id from a uid.
+pub fn multiuser_get_app_id(uid: u32) -> u32 {
+    uid % AID_USER_OFFSET
+}
+
+/// Gets the uid from a user id and app id.
+pub fn multiuser_get_uid(user_id: u32, app_id: u32) -> u32 {
+    (user_id * AID_USER_OFFSET) + (app_id % AID_USER_OFFSET)
+}
