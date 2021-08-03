@@ -6,6 +6,7 @@ rust_library {
     ],
     rustlibs: [
         "libanyhow",
+        "libcutils_bindgen",
         "libsystem_properties_bindgen",
         "libthiserror",
     ],
@@ -26,5 +27,17 @@ rust_bindgen {
         "--allowlist-function=__system_property_read_callback",
         "--allowlist-function=__system_property_set",
         "--allowlist-function=__system_property_wait",
+    ],
+}
+
+rust_bindgen {
+    name: "libcutils_bindgen",
+    wrapper_src: "bindgen/cutils.h",
+    crate_name: "cutils_bindgen",
+    source_stem: "bindings",
+    header_libs: ["libcutils_headers"],
+    bindgen_flags: [
+        "--allowlist-var", "AID_KEYSTORE",
+        "--allowlist-var", "AID_USER_OFFSET",
     ],
 }
