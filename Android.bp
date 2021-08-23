@@ -45,3 +45,23 @@ rust_bindgen {
         "--allowlist-var", "AID_USER_OFFSET",
     ],
 }
+
+rust_test {
+    name: "libsystem_properties_bindgen_test",
+    srcs: [":libsystem_properties_bindgen"],
+    crate_name: "system_properties_bindgen_test",
+    test_suites: ["general-tests"],
+    auto_gen_config: true,
+    clippy_lints: "none",
+    lints: "none",
+}
+
+rust_test {
+    name: "libcutils_bindgen_test",
+    srcs: [":libcutils_bindgen"],
+    crate_name: "cutils_bindgen_test",
+    test_suites: ["general-tests"],
+    auto_gen_config: true,
+    clippy_lints: "none",
+    lints: "none",
+}
