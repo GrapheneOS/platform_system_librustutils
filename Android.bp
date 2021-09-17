@@ -17,6 +17,10 @@ rust_library {
     shared_libs: [
         "libbase",
     ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.virt",
+    ],
 }
 
 rust_bindgen {
@@ -32,6 +36,10 @@ rust_bindgen {
         "--allowlist-function=__system_property_set",
         "--allowlist-function=__system_property_wait",
     ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.virt",
+    ],
 }
 
 rust_bindgen {
@@ -43,6 +51,10 @@ rust_bindgen {
     bindgen_flags: [
         "--allowlist-var", "AID_KEYSTORE",
         "--allowlist-var", "AID_USER_OFFSET",
+    ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.virt",
     ],
 }
 
