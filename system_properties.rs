@@ -88,7 +88,7 @@ impl PropertyWatcher {
         }
     }
 
-    fn read_raw(prop_info: *const PropInfo, mut f: impl FnOnce(Option<&CStr>, Option<&CStr>)) {
+    fn read_raw(prop_info: *const PropInfo, mut f: impl FnMut(Option<&CStr>, Option<&CStr>)) {
         // Unsafe function converts values passed to us by
         // __system_property_read_callback to Rust form
         // and pass them to inner callback.
@@ -104,9 +104,9 @@ impl PropertyWatcher {
             f(name, value);
         }
 
-        let mut f: &mut dyn FnOnce(Option<&CStr>, Option<&CStr>) = &mut f;
+        let mut f: &mut dyn FnMut(Option<&CStr>, Option<&CStr>) = &mut f;
 
-        // Unsafe block for FFI call. We convert the FnOnce
+        // Unsafe block for FFI call. We convert the FnMut
         // to a void pointer, and unwrap it in our callback.
         unsafe {
             system_properties_bindgen::__system_property_read_callback(
@@ -121,9 +121,9 @@ impl PropertyWatcher {
     /// of this system property. See documentation for
     /// `__system_property_read_callback` for details.
     /// Returns an error if the property is empty or doesn't exist.
-    pub fn read<T, F>(&mut self, f: F) -> Result<T>
+    pub fn read<T, F>(&mut self, mut f: F) -> Result<T>
     where
-        F: FnOnce(&str, &str) -> anyhow::Result<T>,
+        F: FnMut(&str, &str) -> anyhow::Result<T>,
     {
         let prop_info = self.get_prop_info().ok_or(PropertyWatcherError::SystemPropertyAbsent)?;
         let mut result = Err(PropertyWatcherError::ReadCallbackNotCalled);
