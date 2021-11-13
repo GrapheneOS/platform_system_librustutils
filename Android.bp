@@ -80,3 +80,16 @@ rust_test {
     clippy_lints: "none",
     lints: "none",
 }
+
+rust_fuzz {
+    name: "system_properties_fuzzer",
+    srcs: ["system_properties_fuzzer.rs"],
+    rustlibs: [
+        "libarbitrary",
+        "librustutils",
+    ],
+    fuzz_config: {
+        fuzz_on_haiku_device: true,
+        fuzz_on_haiku_host: true,
+    },
+}
