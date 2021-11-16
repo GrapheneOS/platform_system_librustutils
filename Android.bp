@@ -52,6 +52,9 @@ rust_bindgen {
     header_libs: ["libcutils_headers"],
     bindgen_flags: [
         "--allowlist-var", "AID_KEYSTORE",
+        "--allowlist-var", "AID_ROOT",
+        "--allowlist-var", "AID_SHELL",
+        "--allowlist-var", "AID_SYSTEM",
         "--allowlist-var", "AID_USER_OFFSET",
     ],
     apex_available: [

@@ -15,6 +15,9 @@
 //! Provides utilities for Android user ids.
 
 pub use cutils_bindgen::AID_KEYSTORE;
+pub use cutils_bindgen::AID_ROOT;
+pub use cutils_bindgen::AID_SHELL;
+pub use cutils_bindgen::AID_SYSTEM;
 pub use cutils_bindgen::AID_USER_OFFSET;
 
 /// Gets the user id from a uid.
