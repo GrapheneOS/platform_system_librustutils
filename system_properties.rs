@@ -202,6 +202,22 @@ pub fn read(name: &str) -> AnyhowResult<String> {
         .with_context(|| format!("Failed to read the system property {}.", name))
 }
 
+fn parse_bool(value: &str) -> Option<bool> {
+    if ["1", "y", "yes", "on", "true"].contains(&value) {
+        Some(true)
+    } else if ["0", "n", "no", "off", "false"].contains(&value) {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// Returns true if the system property `name` has the value "1", "y", "yes", "on", or "true",
+/// false for "0", "n", "no", "off", or "false", or `default_value` otherwise.
+pub fn read_bool(name: &str, default_value: bool) -> AnyhowResult<bool> {
+    Ok(parse_bool(read(name)?.as_str()).unwrap_or(default_value))
+}
+
 /// Writes a system property.
 pub fn write(name: &str, value: &str) -> AnyhowResult<()> {
     if
@@ -222,4 +238,22 @@ pub fn write(name: &str, value: &str) -> AnyhowResult<()> {
     } else {
         Err(anyhow!(PropertyWatcherError::SetPropertyFailed))
     }
+}
+
+#[cfg(test)]
+ mod test {
+     use super::*;
+
+     #[test]
+     fn parse_bool_test() {
+         for s in ["1", "y", "yes", "on", "true"] {
+             assert_eq!(parse_bool(s), Some(true), "testing with {}", s);
+         }
+         for s in ["0", "n", "no", "off", "false"] {
+             assert_eq!(parse_bool(s), Some(false), "testing with {}", s);
+         }
+         for s in ["random", "00", "of course", "no way", "YES", "Off"] {
+             assert_eq!(parse_bool(s), None, "testing with {}", s);
+         }
+     }
 }
