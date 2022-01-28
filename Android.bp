@@ -2,18 +2,21 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
-rust_library {
-    name: "librustutils",
-    crate_name: "rustutils",
-    srcs: [
-        "lib.rs",
-    ],
+rust_defaults {
+    name: "librustutils_defaults",
+    srcs: ["lib.rs"],
     rustlibs: [
         "libanyhow",
         "libcutils_bindgen",
         "libsystem_properties_bindgen",
         "libthiserror",
     ],
+}
+
+rust_library {
+    name: "librustutils",
+    crate_name: "rustutils",
+    defaults: ["librustutils_defaults"],
     shared_libs: [
         "libbase",
     ],
@@ -24,6 +27,14 @@ rust_library {
         "com.android.virt",
     ],
     min_sdk_version: "29",
+}
+
+rust_test {
+    name: "librustutils_test",
+    crate_name: "librustutils_test_test",
+    defaults: ["librustutils_defaults"],
+    test_suites: ["general-tests"],
+    auto_gen_config: true,
 }
 
 rust_bindgen {
