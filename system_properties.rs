@@ -15,7 +15,7 @@
 //! This crate provides the PropertyWatcher type, which watches for changes
 //! in Android system properties.
 
-use anyhow::{anyhow, Context, Result as AnyhowResult};
+use anyhow::Context;
 use system_properties_bindgen::prop_info as PropInfo;
 use std::os::raw::c_char;
 use std::ptr::null;
@@ -195,11 +195,16 @@ impl PropertyWatcher {
 }
 
 /// Reads a system property.
-pub fn read(name: &str) -> AnyhowResult<String> {
-    PropertyWatcher::new(name)
-        .context("Failed to create a PropertyWatcher.")?
+///
+/// Returns `Ok(None)` if the property doesn't exist.
+pub fn read(name: &str) -> Result<Option<String>> {
+    match PropertyWatcher::new(name)?
         .read(|_name, value| Ok(value.to_owned()))
-        .with_context(|| format!("Failed to read the system property {}.", name))
+    {
+        Ok(value) => Ok(Some(value)),
+        Err(PropertyWatcherError::SystemPropertyAbsent) => Ok(None),
+        Err(e) => Err(e),
+    }
 }
 
 fn parse_bool(value: &str) -> Option<bool> {
@@ -214,12 +219,15 @@ fn parse_bool(value: &str) -> Option<bool> {
 
 /// Returns true if the system property `name` has the value "1", "y", "yes", "on", or "true",
 /// false for "0", "n", "no", "off", or "false", or `default_value` otherwise.
-pub fn read_bool(name: &str, default_value: bool) -> AnyhowResult<bool> {
-    Ok(parse_bool(read(name)?.as_str()).unwrap_or(default_value))
+pub fn read_bool(name: &str, default_value: bool) -> Result<bool> {
+    Ok(read(name)?
+        .as_deref()
+        .and_then(parse_bool)
+        .unwrap_or(default_value))
 }
 
 /// Writes a system property.
-pub fn write(name: &str, value: &str) -> AnyhowResult<()> {
+pub fn write(name: &str, value: &str) -> Result<()> {
     if
     // Unsafe required for FFI call. Input and output are both const and valid strings.
     unsafe {
@@ -236,7 +244,7 @@ pub fn write(name: &str, value: &str) -> AnyhowResult<()> {
     {
         Ok(())
     } else {
-        Err(anyhow!(PropertyWatcherError::SetPropertyFailed))
+        Err(PropertyWatcherError::SetPropertyFailed)
     }
 }
 
@@ -256,4 +264,12 @@ pub fn write(name: &str, value: &str) -> AnyhowResult<()> {
              assert_eq!(parse_bool(s), None, "testing with {}", s);
          }
      }
+
+    #[test]
+    fn read_absent_bool_test() {
+        let prop = "certainly.does.not.exist";
+        assert!(matches!(read(prop), Ok(None)));
+        assert!(read_bool(prop, true).unwrap_or(false));
+        assert!(!read_bool(prop, false).unwrap_or(true));
+    }
 }
