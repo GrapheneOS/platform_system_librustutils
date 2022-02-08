@@ -16,13 +16,13 @@
 //! in Android system properties.
 
 use anyhow::Context;
-use system_properties_bindgen::prop_info as PropInfo;
 use std::os::raw::c_char;
 use std::ptr::null;
 use std::{
     ffi::{c_void, CStr, CString},
     str::Utf8Error,
 };
+use system_properties_bindgen::prop_info as PropInfo;
 use thiserror::Error;
 
 /// Errors this crate can generate
@@ -69,7 +69,11 @@ pub struct PropertyWatcher {
 impl PropertyWatcher {
     /// Create a PropertyWatcher for the named system property.
     pub fn new(name: &str) -> Result<Self> {
-        Ok(Self { prop_name: CString::new(name)?, prop_info: null(), serial: 0 })
+        Ok(Self {
+            prop_name: CString::new(name)?,
+            prop_info: null(),
+            serial: 0,
+        })
     }
 
     // Lazy-initializing accessor for self.prop_info.
@@ -98,8 +102,16 @@ impl PropertyWatcher {
             value: *const c_char,
             _: system_properties_bindgen::__uint32_t,
         ) {
-            let name = if name.is_null() { None } else { Some(CStr::from_ptr(name)) };
-            let value = if value.is_null() { None } else { Some(CStr::from_ptr(value)) };
+            let name = if name.is_null() {
+                None
+            } else {
+                Some(CStr::from_ptr(name))
+            };
+            let value = if value.is_null() {
+                None
+            } else {
+                Some(CStr::from_ptr(value))
+            };
             let f = &mut *res_p.cast::<&mut dyn FnMut(Option<&CStr>, Option<&CStr>)>();
             f(name, value);
         }
@@ -125,13 +137,17 @@ impl PropertyWatcher {
     where
         F: FnMut(&str, &str) -> anyhow::Result<T>,
     {
-        let prop_info = self.get_prop_info().ok_or(PropertyWatcherError::SystemPropertyAbsent)?;
+        let prop_info = self
+            .get_prop_info()
+            .ok_or(PropertyWatcherError::SystemPropertyAbsent)?;
         let mut result = Err(PropertyWatcherError::ReadCallbackNotCalled);
         Self::read_raw(prop_info, |name, value| {
             // use a wrapping closure as an erzatz try block.
             result = (|| {
                 let name = name.ok_or(PropertyWatcherError::MissingCString)?.to_str()?;
-                let value = value.ok_or(PropertyWatcherError::MissingCString)?.to_str()?;
+                let value = value
+                    .ok_or(PropertyWatcherError::MissingCString)?
+                    .to_str()?;
                 f(name, value).map_err(PropertyWatcherError::CallbackError)
             })()
         });
@@ -198,9 +214,7 @@ impl PropertyWatcher {
 ///
 /// Returns `Ok(None)` if the property doesn't exist.
 pub fn read(name: &str) -> Result<Option<String>> {
-    match PropertyWatcher::new(name)?
-        .read(|_name, value| Ok(value.to_owned()))
-    {
+    match PropertyWatcher::new(name)?.read(|_name, value| Ok(value.to_owned())) {
         Ok(value) => Ok(Some(value)),
         Err(PropertyWatcherError::SystemPropertyAbsent) => Ok(None),
         Err(e) => Err(e),
@@ -249,21 +263,21 @@ pub fn write(name: &str, value: &str) -> Result<()> {
 }
 
 #[cfg(test)]
- mod test {
-     use super::*;
+mod test {
+    use super::*;
 
-     #[test]
-     fn parse_bool_test() {
-         for s in ["1", "y", "yes", "on", "true"] {
-             assert_eq!(parse_bool(s), Some(true), "testing with {}", s);
-         }
-         for s in ["0", "n", "no", "off", "false"] {
-             assert_eq!(parse_bool(s), Some(false), "testing with {}", s);
-         }
-         for s in ["random", "00", "of course", "no way", "YES", "Off"] {
-             assert_eq!(parse_bool(s), None, "testing with {}", s);
-         }
-     }
+    #[test]
+    fn parse_bool_test() {
+        for s in ["1", "y", "yes", "on", "true"] {
+            assert_eq!(parse_bool(s), Some(true), "testing with {}", s);
+        }
+        for s in ["0", "n", "no", "off", "false"] {
+            assert_eq!(parse_bool(s), Some(false), "testing with {}", s);
+        }
+        for s in ["random", "00", "of course", "no way", "YES", "Off"] {
+            assert_eq!(parse_bool(s), None, "testing with {}", s);
+        }
+    }
 
     #[test]
     fn read_absent_bool_test() {
