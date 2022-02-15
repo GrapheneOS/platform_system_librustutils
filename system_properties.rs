@@ -15,14 +15,14 @@
 //! This crate provides the PropertyWatcher type, which watches for changes
 //! in Android system properties.
 
-use anyhow::{anyhow, Context, Result as AnyhowResult};
-use system_properties_bindgen::prop_info as PropInfo;
+use anyhow::Context;
 use std::os::raw::c_char;
 use std::ptr::null;
 use std::{
     ffi::{c_void, CStr, CString},
     str::Utf8Error,
 };
+use system_properties_bindgen::prop_info as PropInfo;
 use thiserror::Error;
 
 /// Errors this crate can generate
@@ -69,7 +69,11 @@ pub struct PropertyWatcher {
 impl PropertyWatcher {
     /// Create a PropertyWatcher for the named system property.
     pub fn new(name: &str) -> Result<Self> {
-        Ok(Self { prop_name: CString::new(name)?, prop_info: null(), serial: 0 })
+        Ok(Self {
+            prop_name: CString::new(name)?,
+            prop_info: null(),
+            serial: 0,
+        })
     }
 
     // Lazy-initializing accessor for self.prop_info.
@@ -98,8 +102,16 @@ impl PropertyWatcher {
             value: *const c_char,
             _: system_properties_bindgen::__uint32_t,
         ) {
-            let name = if name.is_null() { None } else { Some(CStr::from_ptr(name)) };
-            let value = if value.is_null() { None } else { Some(CStr::from_ptr(value)) };
+            let name = if name.is_null() {
+                None
+            } else {
+                Some(CStr::from_ptr(name))
+            };
+            let value = if value.is_null() {
+                None
+            } else {
+                Some(CStr::from_ptr(value))
+            };
             let f = &mut *res_p.cast::<&mut dyn FnMut(Option<&CStr>, Option<&CStr>)>();
             f(name, value);
         }
@@ -125,13 +137,17 @@ impl PropertyWatcher {
     where
         F: FnMut(&str, &str) -> anyhow::Result<T>,
     {
-        let prop_info = self.get_prop_info().ok_or(PropertyWatcherError::SystemPropertyAbsent)?;
+        let prop_info = self
+            .get_prop_info()
+            .ok_or(PropertyWatcherError::SystemPropertyAbsent)?;
         let mut result = Err(PropertyWatcherError::ReadCallbackNotCalled);
         Self::read_raw(prop_info, |name, value| {
             // use a wrapping closure as an erzatz try block.
             result = (|| {
                 let name = name.ok_or(PropertyWatcherError::MissingCString)?.to_str()?;
-                let value = value.ok_or(PropertyWatcherError::MissingCString)?.to_str()?;
+                let value = value
+                    .ok_or(PropertyWatcherError::MissingCString)?
+                    .to_str()?;
                 f(name, value).map_err(PropertyWatcherError::CallbackError)
             })()
         });
@@ -195,15 +211,37 @@ impl PropertyWatcher {
 }
 
 /// Reads a system property.
-pub fn read(name: &str) -> AnyhowResult<String> {
-    PropertyWatcher::new(name)
-        .context("Failed to create a PropertyWatcher.")?
-        .read(|_name, value| Ok(value.to_owned()))
-        .with_context(|| format!("Failed to read the system property {}.", name))
+///
+/// Returns `Ok(None)` if the property doesn't exist.
+pub fn read(name: &str) -> Result<Option<String>> {
+    match PropertyWatcher::new(name)?.read(|_name, value| Ok(value.to_owned())) {
+        Ok(value) => Ok(Some(value)),
+        Err(PropertyWatcherError::SystemPropertyAbsent) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+fn parse_bool(value: &str) -> Option<bool> {
+    if ["1", "y", "yes", "on", "true"].contains(&value) {
+        Some(true)
+    } else if ["0", "n", "no", "off", "false"].contains(&value) {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// Returns true if the system property `name` has the value "1", "y", "yes", "on", or "true",
+/// false for "0", "n", "no", "off", or "false", or `default_value` otherwise.
+pub fn read_bool(name: &str, default_value: bool) -> Result<bool> {
+    Ok(read(name)?
+        .as_deref()
+        .and_then(parse_bool)
+        .unwrap_or(default_value))
 }
 
 /// Writes a system property.
-pub fn write(name: &str, value: &str) -> AnyhowResult<()> {
+pub fn write(name: &str, value: &str) -> Result<()> {
     if
     // Unsafe required for FFI call. Input and output are both const and valid strings.
     unsafe {
@@ -220,6 +258,32 @@ pub fn write(name: &str, value: &str) -> AnyhowResult<()> {
     {
         Ok(())
     } else {
-        Err(anyhow!(PropertyWatcherError::SetPropertyFailed))
+        Err(PropertyWatcherError::SetPropertyFailed)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parse_bool_test() {
+        for s in ["1", "y", "yes", "on", "true"] {
+            assert_eq!(parse_bool(s), Some(true), "testing with {}", s);
+        }
+        for s in ["0", "n", "no", "off", "false"] {
+            assert_eq!(parse_bool(s), Some(false), "testing with {}", s);
+        }
+        for s in ["random", "00", "of course", "no way", "YES", "Off"] {
+            assert_eq!(parse_bool(s), None, "testing with {}", s);
+        }
+    }
+
+    #[test]
+    fn read_absent_bool_test() {
+        let prop = "certainly.does.not.exist";
+        assert!(matches!(read(prop), Ok(None)));
+        assert!(read_bool(prop, true).unwrap_or(false));
+        assert!(!read_bool(prop, false).unwrap_or(true));
     }
 }
