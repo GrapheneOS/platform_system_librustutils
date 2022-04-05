@@ -26,6 +26,7 @@ rust_library {
         "com.android.compos",
         "com.android.virt",
     ],
+    vendor_available: true,
     min_sdk_version: "29",
 }
 
@@ -51,6 +52,7 @@ rust_bindgen {
         "--allowlist-function=__system_property_set",
         "--allowlist-function=__system_property_wait",
     ],
+    vendor_available: true,
     apex_available: [
         "//apex_available:platform",
         "com.android.bluetooth",
@@ -73,6 +75,7 @@ rust_bindgen {
         "--allowlist-var", "AID_SYSTEM",
         "--allowlist-var", "AID_USER_OFFSET",
     ],
+    vendor_available: true,
     apex_available: [
         "//apex_available:platform",
         "com.android.bluetooth",
