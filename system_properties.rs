@@ -34,6 +34,9 @@ pub enum PropertyWatcherError {
     /// We can only watch for properties that exist when the watcher is created.
     #[error("System property is absent")]
     SystemPropertyAbsent,
+    /// System properties are not initialized
+    #[error("System properties are not initialized.")]
+    Uninitialized,
     /// __system_property_wait timed out despite being given no timeout.
     #[error("Wait failed")]
     WaitFailed,
@@ -262,6 +265,59 @@ pub fn write(name: &str, value: &str) -> Result<()> {
     }
 }
 
+/// Iterates through the properties (that the current process is allowed to access).
+pub fn foreach<F>(mut f: F) -> Result<()>
+where
+    F: FnMut(&str, &str),
+{
+    extern "C" fn read_callback<F: FnMut(&str, &str)>(
+        res_p: *mut c_void,
+        name: *const c_char,
+        value: *const c_char,
+        _: system_properties_bindgen::__uint32_t,
+    ) {
+        // SAFETY: system properties are null-terminated C string in UTF-8. See IsLegalPropertyName
+        // and IsLegalPropertyValue in system/core/init/util.cpp.
+        let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
+        let value = unsafe { CStr::from_ptr(value) }.to_str().unwrap();
+
+        let ptr = res_p as *mut F;
+        // SAFETY: ptr points to the API user's callback, which was cast to `*mut c_void` below.
+        // Here we're casting it back.
+        let f = unsafe { ptr.as_mut() }.unwrap();
+        f(name, value);
+    }
+
+    extern "C" fn foreach_callback<F: FnMut(&str, &str)>(
+        prop_info: *const PropInfo,
+        res_p: *mut c_void,
+    ) {
+        // SAFETY: FFI call with an internal callback function in Rust, with other parameters
+        // passed through.
+        unsafe {
+            system_properties_bindgen::__system_property_read_callback(
+                prop_info,
+                Some(read_callback::<F>),
+                res_p,
+            )
+        }
+    }
+
+    // SAFETY: FFI call with an internal callback function in Rust, and another client's callback
+    // that's cast only for our own use right above.
+    let retval = unsafe {
+        system_properties_bindgen::__system_property_foreach(
+            Some(foreach_callback::<F>),
+            &mut f as *mut _ as *mut c_void,
+        )
+    };
+    if retval < 0 {
+        Err(PropertyWatcherError::Uninitialized)
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -285,5 +341,16 @@ mod test {
         assert!(matches!(read(prop), Ok(None)));
         assert!(read_bool(prop, true).unwrap_or(false));
         assert!(!read_bool(prop, false).unwrap_or(true));
+    }
+
+    #[test]
+    fn foreach_test() {
+        let mut properties = Vec::new();
+        assert!(foreach(|name, value| {
+            properties.push((name.to_owned(), value.to_owned()));
+        })
+        .is_ok());
+        // Assuming the test runs on Android, any process can at least see some system properties.
+        assert!(!properties.is_empty());
     }
 }
