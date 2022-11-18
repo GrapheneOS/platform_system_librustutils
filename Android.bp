@@ -19,6 +19,7 @@ rust_library {
     defaults: ["librustutils_defaults"],
     shared_libs: [
         "libbase",
+        "libcutils",
     ],
     apex_available: [
         "//apex_available:platform",
@@ -71,6 +72,7 @@ rust_bindgen {
     source_stem: "bindings",
     header_libs: ["libcutils_headers"],
     bindgen_flags: [
+        "--allowlist-function", "android_get_control_socket",
         "--allowlist-var", "AID_KEYSTORE",
         "--allowlist-var", "AID_ROOT",
         "--allowlist-var", "AID_SHELL",
