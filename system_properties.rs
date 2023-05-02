@@ -225,12 +225,10 @@ pub fn read(name: &str) -> Result<Option<String>> {
 }
 
 fn parse_bool(value: &str) -> Option<bool> {
-    if ["1", "y", "yes", "on", "true"].contains(&value) {
-        Some(true)
-    } else if ["0", "n", "no", "off", "false"].contains(&value) {
-        Some(false)
-    } else {
-        None
+    match value {
+        "1" | "y" | "yes" | "on" | "true" => Some(true),
+        "0" | "n" | "no" | "off" | "false" => Some(false),
+        _ => None,
     }
 }
 
