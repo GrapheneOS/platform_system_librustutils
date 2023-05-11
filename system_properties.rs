@@ -231,6 +231,23 @@ impl PropertyWatcher {
         let until = timeout.map(|timeout| Instant::now() + timeout);
         self.wait_for_property_change_until(until)
     }
+
+    /// Waits until the property exists and has the given value.
+    pub fn wait_for_value(
+        &mut self,
+        expected_value: &str,
+        timeout: Option<Duration>,
+    ) -> Result<()> {
+        let until = timeout.map(|timeout| Instant::now() + timeout);
+
+        self.wait_for_property_creation_until(until)?;
+
+        while self.read(|_, value| Ok(value != expected_value))? {
+            self.wait_for_property_change_until(until)?;
+        }
+
+        Ok(())
+    }
 }
 
 /// Reads a system property.
