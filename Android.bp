@@ -8,7 +8,8 @@ rust_defaults {
     rustlibs: [
         "libanyhow",
         "libcutils_bindgen",
-        "libsystem_properties_bindgen",
+        "liblibc",
+        "libsystem_properties_bindgen_sys",
         "libthiserror",
     ],
 }
@@ -40,6 +41,33 @@ rust_test {
     auto_gen_config: true,
 }
 
+// Build a separate rust_library rather than depending directly on libsystem_properties_bindgen,
+// to work around the fact that rust_bindgen targets only produce rlibs and not dylibs, which would
+// result in duplicate conflicting versions of liblibc. This will hopefully be fixed in the build
+// system, at which point we can delete this target and go back to using libsystem_properties_bindgen
+// directly.
+rust_library {
+    name: "libsystem_properties_bindgen_sys",
+    crate_name: "system_properties_bindgen",
+    srcs: [
+        ":libsystem_properties_bindgen",
+    ],
+    rustlibs: [
+        "liblibc",
+    ],
+    vendor_available: true,
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.btservices",
+        "com.android.compos",
+        "com.android.uwb",
+        "com.android.virt",
+    ],
+    min_sdk_version: "29",
+    lints: "none",
+    clippy_lints: "none",
+}
+
 rust_bindgen {
     name: "libsystem_properties_bindgen",
     wrapper_src: "bindgen/system_properties.h",
@@ -53,6 +81,12 @@ rust_bindgen {
         "--allowlist-function=__system_property_read_callback",
         "--allowlist-function=__system_property_set",
         "--allowlist-function=__system_property_wait",
+        "--blocklist-type=timespec",
+        "--raw-line",
+        "use libc::timespec;",
+    ],
+    rustlibs: [
+        "liblibc",
     ],
     vendor_available: true,
     apex_available: [
@@ -95,6 +129,9 @@ rust_test {
     srcs: [":libsystem_properties_bindgen"],
     crate_name: "system_properties_bindgen_test",
     test_suites: ["general-tests"],
+    rustlibs: [
+        "liblibc",
+    ],
     auto_gen_config: true,
     clippy_lints: "none",
     lints: "none",

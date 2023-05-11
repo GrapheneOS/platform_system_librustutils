@@ -98,7 +98,7 @@ fuzz_target!(|commands: Vec<Command>| {
                 // Spawn a thread that will wait for a change to the property.
                 let waiter = thread::spawn(move || {
                     let result = match system_properties::PropertyWatcher::new(prop_str) {
-                        Ok(mut watcher) => watcher.wait(),
+                        Ok(mut watcher) => watcher.wait(None),
                         Err(e) => Err(e),
                     };
                     waited_clone.store(true, Ordering::Relaxed);
