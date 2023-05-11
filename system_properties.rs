@@ -16,11 +16,13 @@
 //! in Android system properties.
 
 use anyhow::Context;
+use libc::timespec;
 use std::os::raw::c_char;
 use std::ptr::null;
 use std::{
     ffi::{c_uint, c_void, CStr, CString},
     str::Utf8Error,
+    time::{Duration, Instant},
 };
 use system_properties_bindgen::prop_info as PropInfo;
 use thiserror::Error;
@@ -37,7 +39,7 @@ pub enum PropertyWatcherError {
     /// System properties are not initialized
     #[error("System properties are not initialized.")]
     Uninitialized,
-    /// __system_property_wait timed out despite being given no timeout.
+    /// __system_property_wait timed out.
     #[error("Wait failed")]
     WaitFailed,
     /// read callback was not called
@@ -159,12 +161,13 @@ impl PropertyWatcher {
 
     // Waits for the property that self is watching to be created. Returns immediately if the
     // property already exists.
-    fn wait_for_property_creation(&mut self) -> Result<()> {
+    fn wait_for_property_creation_until(&mut self, until: Option<Instant>) -> Result<()> {
         let mut global_serial = 0;
         loop {
             match self.get_prop_info() {
                 Some(_) => return Ok(()),
                 None => {
+                    let remaining_timeout = remaining_time_until(until);
                     // Unsafe call for FFI. The function modifies only global_serial, and has
                     // no side-effects.
                     if !unsafe {
@@ -174,7 +177,11 @@ impl PropertyWatcher {
                             null(),
                             global_serial,
                             &mut global_serial,
-                            null(),
+                            if let Some(remaining_timeout) = &remaining_timeout {
+                                remaining_timeout
+                            } else {
+                                null()
+                            },
                         )
                     } {
                         return Err(PropertyWatcherError::WaitFailed);
@@ -184,16 +191,17 @@ impl PropertyWatcher {
         }
     }
 
-    /// Wait for the system property to change. This
-    /// records the serial number of the last change, so
-    /// race conditions are avoided.
-    pub fn wait(&mut self) -> Result<()> {
+    /// Waits until the system property changes, or `until` is reached.
+    ///
+    /// This records the serial number of the last change, so race conditions are avoided.
+    fn wait_for_property_change_until(&mut self, until: Option<Instant>) -> Result<()> {
         // If the property is null, then wait for it to be created. Subsequent waits will
         // skip this step and wait for our specific property to change.
         if self.prop_info.is_null() {
-            return self.wait_for_property_creation();
+            return self.wait_for_property_creation_until(None);
         }
 
+        let remaining_timeout = remaining_time_until(until);
         let mut new_serial = self.serial;
         // Unsafe block to call __system_property_wait.
         // All arguments are private to PropertyWatcher so we
@@ -203,13 +211,25 @@ impl PropertyWatcher {
                 self.prop_info,
                 self.serial,
                 &mut new_serial,
-                null(),
+                if let Some(remaining_timeout) = &remaining_timeout {
+                    remaining_timeout
+                } else {
+                    null()
+                },
             )
         } {
             return Err(PropertyWatcherError::WaitFailed);
         }
         self.serial = new_serial;
         Ok(())
+    }
+
+    /// Waits for the system property to change, or the timeout to elapse.
+    ///
+    /// This records the serial number of the last change, so race conditions are avoided.
+    pub fn wait(&mut self, timeout: Option<Duration>) -> Result<()> {
+        let until = timeout.map(|timeout| Instant::now() + timeout);
+        self.wait_for_property_change_until(until)
     }
 }
 
@@ -229,6 +249,27 @@ fn parse_bool(value: &str) -> Option<bool> {
         "1" | "y" | "yes" | "on" | "true" => Some(true),
         "0" | "n" | "no" | "off" | "false" => Some(false),
         _ => None,
+    }
+}
+
+/// Returns the duration remaining until the given instant.
+///
+/// Returns `None` if `None` is passed in, or `Some(0)` if `until` is in the past.
+fn remaining_time_until(until: Option<Instant>) -> Option<timespec> {
+    until.map(|until| {
+        duration_to_timespec(
+            until
+                .checked_duration_since(Instant::now())
+                .unwrap_or_default(),
+        )
+    })
+}
+
+/// Converts the given `Duration` to a C `timespec`.
+fn duration_to_timespec(duration: Duration) -> timespec {
+    timespec {
+        tv_sec: duration.as_secs().try_into().unwrap(),
+        tv_nsec: duration.subsec_nanos().try_into().unwrap(),
     }
 }
 
