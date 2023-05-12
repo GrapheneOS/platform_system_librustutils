@@ -14,6 +14,4 @@
  * limitations under the License.
  */
 
-#pragma once
-
 #include "sys/system_properties.h"
