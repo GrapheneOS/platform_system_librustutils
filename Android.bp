@@ -9,6 +9,7 @@ rust_defaults {
         "libanyhow",
         "libcutils_bindgen",
         "liblibc",
+        "libnix",
         "libsystem_properties_bindgen_sys",
         "libthiserror",
     ],
