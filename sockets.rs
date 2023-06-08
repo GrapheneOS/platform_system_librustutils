@@ -14,6 +14,8 @@
 
 //! Provides utilities for sockets.
 
+use nix::errno::Errno;
+use nix::fcntl::{fcntl, FdFlag, F_SETFD};
 use std::ffi::CString;
 use std::os::unix::io::RawFd;
 use thiserror::Error;
@@ -28,11 +30,16 @@ pub enum SocketError {
     /// android_get_control_socket failed to get a fd
     #[error("android_get_control_socket({0}) failed")]
     GetControlSocketFailed(String),
+
+    /// Failed to execute fcntl
+    #[error("Failed to execute fcntl {0}")]
+    FcntlFailed(Errno),
 }
 
 /// android_get_control_socket - simple helper function to get the file
 /// descriptor of our init-managed Unix domain socket. `name' is the name of the
 /// socket, as given in init.rc. Returns -1 on error.
+/// The returned file descriptor has the flag CLOEXEC set.
 pub fn android_get_control_socket(name: &str) -> Result<RawFd, SocketError> {
     let cstr = CString::new(name).map_err(|_| SocketError::NulError(name.to_owned()))?;
     // SAFETY: android_get_control_socket doesn't take ownership of name
@@ -40,5 +47,7 @@ pub fn android_get_control_socket(name: &str) -> Result<RawFd, SocketError> {
     if fd < 0 {
         return Err(SocketError::GetControlSocketFailed(name.to_owned()));
     }
+    // The file descriptor had CLOEXEC disabled to be inherited from the parent.
+    fcntl(fd, F_SETFD(FdFlag::FD_CLOEXEC)).map_err(SocketError::FcntlFailed)?;
     Ok(fd)
 }
