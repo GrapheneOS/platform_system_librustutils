@@ -84,8 +84,8 @@ impl PropertyWatcher {
     // Lazy-initializing accessor for self.prop_info.
     fn get_prop_info(&mut self) -> Option<*const PropInfo> {
         if self.prop_info.is_null() {
-            // Unsafe required for FFI call. Input and output are both const.
-            // The returned pointer is valid for the lifetime of the program.
+            // SAFETY: Input and output are both const. The returned pointer is valid for the
+            // lifetime of the program.
             self.prop_info = unsafe {
                 system_properties_bindgen::__system_property_find(self.prop_name.as_ptr())
             };
@@ -110,21 +110,26 @@ impl PropertyWatcher {
             let name = if name.is_null() {
                 None
             } else {
-                Some(CStr::from_ptr(name))
+                // SAFETY: system property names are null-terminated C strings in UTF-8. See
+                // IsLegalPropertyName in system/core/init/util.cpp.
+                Some(unsafe { CStr::from_ptr(name) })
             };
             let value = if value.is_null() {
                 None
             } else {
-                Some(CStr::from_ptr(value))
+                // SAFETY: system property values are null-terminated C strings in UTF-8. See
+                // IsLegalPropertyValue in system/core/init/util.cpp.
+                Some(unsafe { CStr::from_ptr(value) })
             };
-            let f = &mut *res_p.cast::<&mut dyn FnMut(Option<&CStr>, Option<&CStr>)>();
+            // SAFETY: We converted the FnMut from `f` to a void pointer below, now we convert it
+            // back.
+            let f = unsafe { &mut *res_p.cast::<&mut dyn FnMut(Option<&CStr>, Option<&CStr>)>() };
             f(name, value);
         }
 
         let mut f: &mut dyn FnMut(Option<&CStr>, Option<&CStr>) = &mut f;
 
-        // Unsafe block for FFI call. We convert the FnMut
-        // to a void pointer, and unwrap it in our callback.
+        // SAFETY: We convert the FnMut to a void pointer, and unwrap it in our callback.
         unsafe {
             system_properties_bindgen::__system_property_read_callback(
                 prop_info,
@@ -168,8 +173,7 @@ impl PropertyWatcher {
                 Some(_) => return Ok(()),
                 None => {
                     let remaining_timeout = remaining_time_until(until);
-                    // Unsafe call for FFI. The function modifies only global_serial, and has
-                    // no side-effects.
+                    // SAFETY: The function modifies only global_serial, and has no side-effects.
                     if !unsafe {
                         // Wait for a global serial number change, then try again. On success,
                         // the function will update global_serial with the last version seen.
@@ -203,9 +207,8 @@ impl PropertyWatcher {
 
         let remaining_timeout = remaining_time_until(until);
         let mut new_serial = self.serial;
-        // Unsafe block to call __system_property_wait.
-        // All arguments are private to PropertyWatcher so we
-        // can be confident they are valid.
+        // SAFETY: All arguments are private to PropertyWatcher so we can be confident they are
+        // valid.
         if !unsafe {
             system_properties_bindgen::__system_property_wait(
                 self.prop_info,
@@ -302,7 +305,7 @@ pub fn read_bool(name: &str, default_value: bool) -> Result<bool> {
 /// Writes a system property.
 pub fn write(name: &str, value: &str) -> Result<()> {
     if
-    // Unsafe required for FFI call. Input and output are both const and valid strings.
+    // SAFETY: Input and output are both const and valid strings.
     unsafe {
         // If successful, __system_property_set returns 0, otherwise, returns -1.
         system_properties_bindgen::__system_property_set(
@@ -332,9 +335,11 @@ where
         value: *const c_char,
         _: c_uint,
     ) {
-        // SAFETY: system properties are null-terminated C string in UTF-8. See IsLegalPropertyName
-        // and IsLegalPropertyValue in system/core/init/util.cpp.
+        // SAFETY: system property names are null-terminated C strings in UTF-8. See
+        // IsLegalPropertyName in system/core/init/util.cpp.
         let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
+        // SAFETY: system property values are null-terminated C strings in UTF-8. See
+        // IsLegalPropertyValue in system/core/init/util.cpp.
         let value = unsafe { CStr::from_ptr(value) }.to_str().unwrap();
 
         let ptr = res_p as *mut F;
