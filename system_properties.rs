@@ -15,55 +15,21 @@
 //! This crate provides the PropertyWatcher type, which watches for changes
 //! in Android system properties.
 
+// Temporary public re-export to avoid breaking dependents.
+pub use self::error::{PropertyWatcherError, Result};
 use anyhow::Context;
 use libc::timespec;
 use std::os::raw::c_char;
 use std::ptr::null;
 use std::{
     ffi::{c_uint, c_void, CStr, CString},
-    str::Utf8Error,
     time::{Duration, Instant},
 };
 use system_properties_bindgen::prop_info as PropInfo;
-use thiserror::Error;
 
+pub mod error;
 #[doc(hidden)]
 pub mod parsers_formatters;
-
-/// Errors this crate can generate
-#[derive(Error, Debug)]
-pub enum PropertyWatcherError {
-    /// We can't watch for a property whose name contains a NUL character.
-    #[error("Cannot convert name to C string")]
-    BadNameError(#[from] std::ffi::NulError),
-    /// We can only watch for properties that exist when the watcher is created.
-    #[error("System property is absent")]
-    SystemPropertyAbsent,
-    /// System properties are not initialized
-    #[error("System properties are not initialized.")]
-    Uninitialized,
-    /// __system_property_wait timed out.
-    #[error("Wait failed")]
-    WaitFailed,
-    /// read callback was not called
-    #[error("__system_property_read_callback did not call callback")]
-    ReadCallbackNotCalled,
-    /// read callback gave us a NULL pointer
-    #[error("__system_property_read_callback gave us a NULL pointer instead of a string")]
-    MissingCString,
-    /// read callback gave us a bad C string
-    #[error("__system_property_read_callback gave us a non-UTF8 C string")]
-    BadCString(#[from] Utf8Error),
-    /// read callback returned an error
-    #[error("Callback failed")]
-    CallbackError(#[from] anyhow::Error),
-    /// Failure in setting the system property
-    #[error("__system_property_set failed.")]
-    SetPropertyFailed,
-}
-
-/// Result type specific for this crate.
-pub type Result<T> = std::result::Result<T, PropertyWatcherError>;
 
 /// PropertyWatcher takes the name of an Android system property such
 /// as `keystore.boot_level`; it can report the current value of this
@@ -77,11 +43,7 @@ pub struct PropertyWatcher {
 impl PropertyWatcher {
     /// Create a PropertyWatcher for the named system property.
     pub fn new(name: &str) -> Result<Self> {
-        Ok(Self {
-            prop_name: CString::new(name)?,
-            prop_info: null(),
-            serial: 0,
-        })
+        Ok(Self { prop_name: CString::new(name)?, prop_info: null(), serial: 0 })
     }
 
     // Lazy-initializing accessor for self.prop_info.
@@ -150,17 +112,13 @@ impl PropertyWatcher {
     where
         F: FnMut(&str, &str) -> anyhow::Result<T>,
     {
-        let prop_info = self
-            .get_prop_info()
-            .ok_or(PropertyWatcherError::SystemPropertyAbsent)?;
+        let prop_info = self.get_prop_info().ok_or(PropertyWatcherError::SystemPropertyAbsent)?;
         let mut result = Err(PropertyWatcherError::ReadCallbackNotCalled);
         Self::read_raw(prop_info, |name, value| {
             // use a wrapping closure as an erzatz try block.
             result = (|| {
                 let name = name.ok_or(PropertyWatcherError::MissingCString)?.to_str()?;
-                let value = value
-                    .ok_or(PropertyWatcherError::MissingCString)?
-                    .to_str()?;
+                let value = value.ok_or(PropertyWatcherError::MissingCString)?.to_str()?;
                 f(name, value).map_err(PropertyWatcherError::CallbackError)
             })()
         });
@@ -280,11 +238,7 @@ fn parse_bool(value: &str) -> Option<bool> {
 /// Returns `None` if `None` is passed in, or `Some(0)` if `until` is in the past.
 fn remaining_time_until(until: Option<Instant>) -> Option<timespec> {
     until.map(|until| {
-        duration_to_timespec(
-            until
-                .checked_duration_since(Instant::now())
-                .unwrap_or_default(),
-        )
+        duration_to_timespec(until.checked_duration_since(Instant::now()).unwrap_or_default())
     })
 }
 
@@ -299,10 +253,7 @@ fn duration_to_timespec(duration: Duration) -> timespec {
 /// Returns true if the system property `name` has the value "1", "y", "yes", "on", or "true",
 /// false for "0", "n", "no", "off", or "false", or `default_value` otherwise.
 pub fn read_bool(name: &str, default_value: bool) -> Result<bool> {
-    Ok(read(name)?
-        .as_deref()
-        .and_then(parse_bool)
-        .unwrap_or(default_value))
+    Ok(read(name)?.as_deref().and_then(parse_bool).unwrap_or(default_value))
 }
 
 /// Writes a system property.
@@ -312,12 +263,8 @@ pub fn write(name: &str, value: &str) -> Result<()> {
     unsafe {
         // If successful, __system_property_set returns 0, otherwise, returns -1.
         system_properties_bindgen::__system_property_set(
-            CString::new(name)
-                .context("Failed to construct CString from name.")?
-                .as_ptr(),
-            CString::new(value)
-                .context("Failed to construct CString from value.")?
-                .as_ptr(),
+            CString::new(name).context("Failed to construct CString from name.")?.as_ptr(),
+            CString::new(value).context("Failed to construct CString from value.")?.as_ptr(),
         )
     } == 0
     {
