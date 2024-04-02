@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::{fmt, thread, time};
 
 thread_local! {
-    static COUNTER: RefCell<u64> = RefCell::new(0);
+    static COUNTER: RefCell<u64> = const{RefCell::new(0)};
 }
 
 #[derive(Arbitrary, Clone, Debug)]
