@@ -36,37 +36,33 @@ pub mod parsers_formatters;
 /// property, or wait for it to change.
 pub struct PropertyWatcher {
     prop_name: CString,
-    prop_info: *const PropInfo,
+    prop_info: Option<&'static PropInfo>,
     serial: c_uint,
 }
 
 impl PropertyWatcher {
     /// Create a PropertyWatcher for the named system property.
     pub fn new(name: &str) -> Result<Self> {
-        Ok(Self { prop_name: CString::new(name)?, prop_info: null(), serial: 0 })
+        Ok(Self { prop_name: CString::new(name)?, prop_info: None, serial: 0 })
     }
 
     // Lazy-initializing accessor for self.prop_info.
-    fn get_prop_info(&mut self) -> Option<*const PropInfo> {
-        if self.prop_info.is_null() {
+    fn get_prop_info(&mut self) -> Option<&'static PropInfo> {
+        if self.prop_info.is_none() {
             // SAFETY: Input and output are both const. The returned pointer is valid for the
             // lifetime of the program.
             self.prop_info = unsafe {
-                system_properties_bindgen::__system_property_find(self.prop_name.as_ptr())
+                system_properties_bindgen::__system_property_find(self.prop_name.as_ptr()).as_ref()
             };
         }
-        if self.prop_info.is_null() {
-            None
-        } else {
-            Some(self.prop_info)
-        }
+        self.prop_info
     }
 
-    fn read_raw(prop_info: *const PropInfo, mut f: impl FnMut(Option<&CStr>, Option<&CStr>)) {
+    fn read_raw<F: FnMut(Option<&CStr>, Option<&CStr>)>(prop_info: &PropInfo, mut f: F) {
         // Unsafe function converts values passed to us by
         // __system_property_read_callback to Rust form
         // and pass them to inner callback.
-        unsafe extern "C" fn callback(
+        unsafe extern "C" fn callback<F: FnMut(Option<&CStr>, Option<&CStr>)>(
             res_p: *mut c_void,
             name: *const c_char,
             value: *const c_char,
@@ -86,20 +82,18 @@ impl PropertyWatcher {
                 // IsLegalPropertyValue in system/core/init/util.cpp.
                 Some(unsafe { CStr::from_ptr(value) })
             };
-            // SAFETY: We converted the FnMut from `f` to a void pointer below, now we convert it
+            // SAFETY: We converted the FnMut from `F` to a void pointer below, now we convert it
             // back.
-            let f = unsafe { &mut *res_p.cast::<&mut dyn FnMut(Option<&CStr>, Option<&CStr>)>() };
+            let f = unsafe { &mut *res_p.cast::<F>() };
             f(name, value);
         }
-
-        let mut f: &mut dyn FnMut(Option<&CStr>, Option<&CStr>) = &mut f;
 
         // SAFETY: We convert the FnMut to a void pointer, and unwrap it in our callback.
         unsafe {
             system_properties_bindgen::__system_property_read_callback(
                 prop_info,
-                Some(callback),
-                &mut f as *mut _ as *mut c_void,
+                Some(callback::<F>),
+                &mut f as *mut F as *mut c_void,
             )
         }
     }
@@ -160,9 +154,9 @@ impl PropertyWatcher {
     ///
     /// This records the serial number of the last change, so race conditions are avoided.
     fn wait_for_property_change_until(&mut self, until: Option<Instant>) -> Result<()> {
-        // If the property is null, then wait for it to be created. Subsequent waits will
+        // If the property is None, then wait for it to be created. Subsequent waits will
         // skip this step and wait for our specific property to change.
-        if self.prop_info.is_null() {
+        if self.prop_info.is_none() {
             return self.wait_for_property_creation_until(None);
         }
 
@@ -172,7 +166,10 @@ impl PropertyWatcher {
         // valid.
         if !unsafe {
             system_properties_bindgen::__system_property_wait(
-                self.prop_info,
+                match self.prop_info {
+                    Some(p) => p,
+                    None => null(),
+                },
                 self.serial,
                 &mut new_serial,
                 if let Some(remaining_timeout) = &remaining_timeout {
@@ -319,7 +316,7 @@ where
     let retval = unsafe {
         system_properties_bindgen::__system_property_foreach(
             Some(foreach_callback::<F>),
-            &mut f as *mut _ as *mut c_void,
+            &mut f as *mut F as *mut c_void,
         )
     };
     if retval < 0 {
