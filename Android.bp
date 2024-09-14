@@ -6,12 +6,19 @@ package {
 rust_defaults {
     name: "librustutils_defaults",
     srcs: ["lib.rs"],
+    host_supported: true,
+    target: {
+        android: {
+            rustlibs: [
+                "libcutils_bindgen",
+                "libsystem_properties_bindgen_sys",
+            ],
+        },
+    },
     rustlibs: [
         "libanyhow",
-        "libcutils_bindgen",
         "liblibc",
         "libnix",
-        "libsystem_properties_bindgen_sys",
         "libthiserror",
     ],
 }
@@ -42,6 +49,15 @@ rust_test {
     defaults: ["librustutils_defaults"],
     test_suites: ["general-tests"],
     auto_gen_config: true,
+    rustlibs: [
+        "libtempfile",
+    ],
+    // Below flags are to run each test function in a separate process which is needed for
+    // the crate::inherited_fd::test. Note that tests still run in parallel.
+    flags: [
+        "-C panic=abort",
+        "-Z panic_abort_tests",
+    ]
 }
 
 // Build a separate rust_library rather than depending directly on libsystem_properties_bindgen,
