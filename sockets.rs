@@ -14,40 +14,41 @@
 
 //! Provides utilities for sockets.
 
-use nix::errno::Errno;
-use nix::fcntl::{fcntl, FdFlag, F_SETFD};
 use std::ffi::CString;
-use std::os::unix::io::RawFd;
+use std::os::fd::OwnedFd;
 use thiserror::Error;
+
+use crate::inherited_fd;
 
 /// Errors this crate can generate
 #[derive(Error, Debug)]
 pub enum SocketError {
-    /// invalid name parameter
-    #[error("socket name {0} contains NUL byte")]
-    NulError(String),
+    /// Invalid socket name. It could be either due to a null byte in the name, or the name refers
+    /// to a non-existing socket.
+    #[error("socket name {0} is invalid")]
+    InvalidName(String),
 
-    /// android_get_control_socket failed to get a fd
-    #[error("android_get_control_socket({0}) failed")]
-    GetControlSocketFailed(String),
-
-    /// Failed to execute fcntl
-    #[error("Failed to execute fcntl {0}")]
-    FcntlFailed(Errno),
+    /// Error when taking ownership of the socket file descriptor.
+    #[error("Failed to take file descriptor ownership: {0}")]
+    OwnershipFailed(inherited_fd::Error),
 }
 
-/// android_get_control_socket - simple helper function to get the file
-/// descriptor of our init-managed Unix domain socket. `name' is the name of the
-/// socket, as given in init.rc. Returns -1 on error.
+/// Get `OwnedFd` for a Unix domain socket that init created under the name `name`. See
+/// [Android Init Language]
+/// (https://cs.android.com/android/platform/superproject/main/+/main:system/core/init/README.md)
+/// for creating sockets and giving them names.
+///
 /// The returned file descriptor has the flag CLOEXEC set.
-pub fn android_get_control_socket(name: &str) -> Result<RawFd, SocketError> {
-    let cstr = CString::new(name).map_err(|_| SocketError::NulError(name.to_owned()))?;
+///
+/// This function returns `SocketError::OwnershipFailed` if `crate::inherited_fd::init_once` was
+/// not called very early in the process startup or this function is called multile times with the
+/// same `name`.
+pub fn android_get_control_socket(name: &str) -> Result<OwnedFd, SocketError> {
+    let cstr = CString::new(name).map_err(|_| SocketError::InvalidName(name.to_owned()))?;
     // SAFETY: android_get_control_socket doesn't take ownership of name
     let fd = unsafe { cutils_bindgen::android_get_control_socket(cstr.as_ptr()) };
     if fd < 0 {
-        return Err(SocketError::GetControlSocketFailed(name.to_owned()));
+        return Err(SocketError::InvalidName(name.to_owned()));
     }
-    // The file descriptor had CLOEXEC disabled to be inherited from the parent.
-    fcntl(fd, F_SETFD(FdFlag::FD_CLOEXEC)).map_err(SocketError::FcntlFailed)?;
-    Ok(fd)
+    inherited_fd::take_fd_ownership(fd).map_err(SocketError::OwnershipFailed)
 }
