@@ -33,7 +33,7 @@ rust_library {
     ],
     apex_available: [
         "//apex_available:platform",
-        "com.android.btservices",
+        "com.android.bt",
         "com.android.compos",
         "com.android.uwb",
         "com.android.virt",
@@ -58,7 +58,7 @@ rust_test {
     flags: [
         "-C panic=abort",
         "-Z panic_abort_tests",
-    ]
+    ],
 }
 
 // Build a separate rust_library rather than depending directly on libsystem_properties_bindgen,
@@ -79,7 +79,7 @@ rust_library {
     vendor_available: true,
     apex_available: [
         "//apex_available:platform",
-        "com.android.btservices",
+        "com.android.bt",
         "com.android.compos",
         "com.android.uwb",
         "com.android.virt",
@@ -113,7 +113,7 @@ rust_bindgen {
     vendor_available: true,
     apex_available: [
         "//apex_available:platform",
-        "com.android.btservices",
+        "com.android.bt",
         "com.android.compos",
         "com.android.uwb",
         "com.android.virt",
@@ -146,7 +146,7 @@ rust_bindgen {
     vendor_available: true,
     apex_available: [
         "//apex_available:platform",
-        "com.android.btservices",
+        "com.android.bt",
         "com.android.compos",
         "com.android.uwb",
         "com.android.virt",
