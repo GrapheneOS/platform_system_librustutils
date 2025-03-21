@@ -75,11 +75,7 @@ rust_library {
     vendor_available: true,
     apex_available: [
         "//apex_available:platform",
-        "com.android.bt",
-        "com.android.compos",
-        "com.android.uwb",
-        "com.android.virt",
-        "com.android.configinfrastructure",
+        "//apex_available:anyapex",
     ],
     min_sdk_version: "29",
     lints: "none",
@@ -109,11 +105,7 @@ rust_bindgen {
     vendor_available: true,
     apex_available: [
         "//apex_available:platform",
-        "com.android.bt",
-        "com.android.compos",
-        "com.android.uwb",
-        "com.android.virt",
-        "com.android.configinfrastructure",
+        "//apex_available:anyapex",
     ],
     min_sdk_version: "29",
 }
@@ -142,11 +134,7 @@ rust_bindgen {
     vendor_available: true,
     apex_available: [
         "//apex_available:platform",
-        "com.android.bt",
-        "com.android.compos",
-        "com.android.uwb",
-        "com.android.virt",
-        "com.android.configinfrastructure",
+        "//apex_available:anyapex",
     ],
     min_sdk_version: "29",
 }
